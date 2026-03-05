@@ -128,7 +128,7 @@ At the top of the scriptlet section, add:
 ### 2b. Load the reCAPTCHA JS (in `<head>`)
 
 ```jsp
-Replace each occurence of the variable reCaptchaEnabled in <html> block wth isTargetApp
+Replace each occurence of the variable **reCaptchaEnabled** in <html> block wth **isTargetApp**
 ```
 
 ### 2c. Change in basicauth.jsp
@@ -136,7 +136,7 @@ Replace each occurence of the variable reCaptchaEnabled in <html> block wth isTa
 <IS-HOME>/repository/deployment/server/webapps/authenticationendpoint/login.jsp
 
 ```jsp
-Find and replace the variable reCaptchaEnabled with isTargetApp
+Find and replace the variable **reCaptchaEnabled** with **isTargetApp**
 ```
 
 ---
