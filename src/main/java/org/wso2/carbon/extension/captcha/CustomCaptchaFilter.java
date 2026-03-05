@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import static org.wso2.carbon.extension.captcha.CustomCaptchaFilterConstants.*;
+
 public class CustomCaptchaFilter implements Filter {
 
     private static final Log log = LogFactory.getLog(CustomCaptchaFilter.class);
@@ -23,9 +25,6 @@ public class CustomCaptchaFilter implements Filter {
     private static final String SECRET = "e3er3sAefefefef8ZgcKjPJhl"; // replace these values with your keys
     private static final String TARGET_SP = "fefegegeggHSI5UV2_p4Hfmy6kQa";
 
-    private static final String RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
-    private static final String COMMONAUTH_PATH = "/commonauth";
-    private static final String RECAPTCHA_PARAM = "g-recaptcha-response";
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
