@@ -79,6 +79,15 @@ public class CustomCaptchaFilter implements Filter {
         }
 
         HttpURLConnection conn = (HttpURLConnection) new URL(RECAPTCHA_VERIFY_URL).openConnection();
+
+        // to redirect this call to a proxy, remove the above line and uncomment below
+        // change proxy host name and port as well
+
+//        Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress("proxy.host.com", 8080));
+//
+//        URL url = new URL(RECAPTCHA_VERIFY_URL);
+//        HttpURLConnection conn = (HttpURLConnection) url.openConnection(proxy);
+
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
 
