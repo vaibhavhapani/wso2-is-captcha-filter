@@ -172,12 +172,12 @@ class = "org.wso2.carbon.extension.captcha.CustomCaptchaFilter"
 
 [[tomcat.filter_mapping]]
 name = "CustomCaptchaFilter"
-url_pattern = "/*"
+url_pattern = "/commonauth"
 
 [custom.captcha]
 clientIds = "enqindsiqndiwndiwndindinian,MY_ACCOUNT,another_app, etc"
 siteVerifyUrl = "https://www.google.com/recaptcha/api/siteverify"
-secret = "YOUR_SECRET_KEY"
+secret = "YOUR_GOOGLE_API_SECRET_KEY"
 ```
 
 ---
