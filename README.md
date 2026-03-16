@@ -133,7 +133,7 @@ Replace each occurence of the variable reCaptchaEnabled in <html> block wth isTa
 
 ### 2c. Change in basicauth.jsp
 
-<IS-HOME>/repository/deployment/server/webapps/authenticationendpoint/login.jsp
+<IS-HOME>/repository/deployment/server/webapps/authenticationendpoint/basicauth.jsp
 
 ```jsp
 Find and replace the variable reCaptchaEnabled with isTargetApp
@@ -173,6 +173,11 @@ class = "org.wso2.carbon.extension.captcha.CustomCaptchaFilter"
 [[tomcat.filter_mapping]]
 name = "CustomCaptchaFilter"
 url_pattern = "/*"
+
+[custom.captcha]
+clientIds = "enqindsiqndiwndiwndindinian,MY_ACCOUNT,another_app, etc"
+siteVerifyUrl = "https://www.google.com/recaptcha/api/siteverify"
+secret = "YOUR_SECRET_KEY"
 ```
 
 ---

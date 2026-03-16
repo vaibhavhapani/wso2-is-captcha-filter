@@ -87,6 +87,11 @@ public class CustomCaptchaFilter implements Filter {
 
         HttpServletRequest req = (HttpServletRequest) request;
 
+        if (!"POST".equalsIgnoreCase(req.getMethod())) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         log.info("CustomCaptchaFilter triggered");
 
         String referer = req.getHeader("Referer");
@@ -204,7 +209,6 @@ public class CustomCaptchaFilter implements Filter {
         } catch (Exception e) {
             log.warn("Failed to extract client_id from referer", e);
         }
-
         return null;
     }
 
