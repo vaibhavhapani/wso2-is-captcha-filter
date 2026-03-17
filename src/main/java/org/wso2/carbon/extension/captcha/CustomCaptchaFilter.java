@@ -28,10 +28,11 @@ public class CustomCaptchaFilter implements Filter {
     private static String siteVerifyUrl;
     private static String recaptchaSecret;
     private Set<String> targetClientIds;
+    private static String proxyHost;
+    private static int proxyPort = -1;
     private static boolean initialized = false;
 
     public CustomCaptchaFilter() {
-        System.out.println("CUSTOM CAPTCHA FILTER LOADED");
     }
 
     @Override
@@ -42,13 +43,14 @@ public class CustomCaptchaFilter implements Filter {
 
         synchronized (CustomCaptchaFilter.class) {
             if (!initialized) {
-                log.info("CUSTOM CAPTCHA FILTER LOADED!!");
+                log.info("CUSTOM CAPTCHA FILTER INITIALIZED!!");
                 loadCaptchaConfig();
             }
         }
     }
 
     private void loadCaptchaConfig() {
+
         try {
             String carbonHome = System.getProperty("carbon.home");
             File file = new File(carbonHome + "/repository/conf/deployment.toml");
@@ -56,20 +58,57 @@ public class CustomCaptchaFilter implements Filter {
             BufferedReader reader = new BufferedReader(new FileReader(file));
             String line;
 
+            boolean inCustomCaptchaBlock = false;
+
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
 
-                if (line.startsWith("clientIds")) {
-                    String value = line.split("=")[1].replace("\"", "").trim();
-                    targetClientIds = Arrays.stream(value.split(",")).map(String::trim).collect(Collectors.toSet());
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue;
                 }
 
-                if (line.startsWith("siteVerifyUrl")) {
-                    siteVerifyUrl = line.split("=")[1].replace("\"", "").trim();
+                if (line.startsWith("[") && line.endsWith("]")) {
+                    inCustomCaptchaBlock = line.equals(CUSTOM_CAPTCHA_BLOCK);
+                    continue;
                 }
 
-                if (line.startsWith("secret")) {
-                    recaptchaSecret = line.split("=")[1].replace("\"", "").trim();
+                if (!inCustomCaptchaBlock || !line.contains("=")) {
+                    continue;
+                }
+
+                // Split key and value
+                String[] parts = line.split("=", 2);
+                String key = parts[0].trim();
+                String value = parts[1].replace("\"", "").trim();
+
+                switch (key) {
+
+                    case CLIENT_IDs:
+                        targetClientIds = Arrays.stream(value.split(",")).map(String::trim).collect(Collectors.toSet());
+                        break;
+
+                    case SITE_VERIFY_URL:
+                        siteVerifyUrl = value;
+                        break;
+
+                    case SECRET_KEY:
+                        recaptchaSecret = value;
+                        break;
+
+                    case PROXY_HOST:
+                        proxyHost = value;
+                        break;
+
+                    case PROXY_PORT:
+                        try {
+                            proxyPort = Integer.parseInt(value);
+                        } catch (NumberFormatException e) {
+                            log.warn("Invalid proxy port: " + value);
+                        }
+                        break;
+
+                    default:
+                        break;
                 }
             }
             reader.close();
@@ -78,6 +117,9 @@ public class CustomCaptchaFilter implements Filter {
         }
 
         initialized = true;
+        if (proxyPort != -1 && (proxyHost == null || proxyHost.isEmpty())) {
+            log.warn("Proxy port is set but proxy host is missing");
+        }
         log.info("Captcha enabled for SP client IDs: " + targetClientIds);
         log.info("reCAPTCHA verify endpoint: " + siteVerifyUrl);
     }
@@ -149,18 +191,20 @@ public class CustomCaptchaFilter implements Filter {
     }
 
     private HttpURLConnection getHttpURLConnection() throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(siteVerifyUrl).openConnection();
+        URL url = new URL(siteVerifyUrl);
+        HttpURLConnection conn;
 
-//         to redirect this call to a proxy, remove the above line and uncomment below
-//         change proxy host name and port as well
-//
-//        Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress("proxy.host.com", 8080));
-//
-//        URL url = new URL(RECAPTCHA_VERIFY_URL);
-//        HttpURLConnection conn = (HttpURLConnection) url.openConnection(proxy);
+        if (proxyHost != null && !proxyHost.isEmpty() && proxyPort > 0) {
+            log.info("Using proxy for reCAPTCHA call: " + proxyHost + ":" + proxyPort);
+            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+            conn = (HttpURLConnection) url.openConnection(proxy);
+        } else {
+            conn = (HttpURLConnection) url.openConnection();
+        }
 
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
+
         return conn;
     }
 
@@ -169,19 +213,14 @@ public class CustomCaptchaFilter implements Filter {
             URL refererUrl = new URL(referer);
             String query = refererUrl.getQuery();
 
-            // Convert query string to a map
             Map<String, String> params = Arrays.stream(query.split("&")).map(s -> s.split("=", 2)).collect(Collectors.toMap(a -> a[0], a -> a.length > 1 ? URLDecoder.decode(a[1], StandardCharsets.UTF_8) : ""));
 
-            // Add/override parameters for CAPTCHA failure
             params.put("authFailure", "true");
             params.put("authFailureMsg", "recaptcha.fail.message");
 
-            // Reconstruct query string
             String newQuery = params.entrySet().stream().map(e -> e.getKey() + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8)).collect(Collectors.joining("&"));
 
-            // Rebuild full redirect URL
             return refererUrl.getProtocol() + "://" + refererUrl.getHost() + (refererUrl.getPort() != -1 ? ":" + refererUrl.getPort() : "") + refererUrl.getPath() + "?" + newQuery;
-
         } catch (MalformedURLException e) {
             log.error("Invalid Referer URL: " + referer, e);
 

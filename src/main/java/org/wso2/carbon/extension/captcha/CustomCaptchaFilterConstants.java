@@ -8,8 +8,10 @@ public class CustomCaptchaFilterConstants {
 
     public static final String RECAPTCHA_PARAM = "g-recaptcha-response";
 
-    public static final String PARAM_SESSION_DATA_KEY   = "sessionDataKey";
-    public static final String PARAM_RELYING_PARTY      = "relyingParty";
-
-
+    public static final String CUSTOM_CAPTCHA_BLOCK = "[custom.captcha]";
+;    public static final String CLIENT_IDs  = "clientIds";
+    public static final String SITE_VERIFY_URL = "siteVerifyUrl";
+    public static final String SECRET_KEY = "secret_key";
+    public static final String PROXY_HOST = "proxyHost";
+    public static final String PROXY_PORT = "proxyPort";
 }
