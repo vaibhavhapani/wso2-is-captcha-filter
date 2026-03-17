@@ -178,6 +178,8 @@ url_pattern = "/commonauth"
 clientIds = "enqindsiqndiwndiwndindinian,MY_ACCOUNT,another_app, etc"
 siteVerifyUrl = "https://www.google.com/recaptcha/api/siteverify"
 secret = "YOUR_GOOGLE_API_SECRET_KEY"
+proxyHost = "" 
+proxyPort = ""
 ```
 
 ---
