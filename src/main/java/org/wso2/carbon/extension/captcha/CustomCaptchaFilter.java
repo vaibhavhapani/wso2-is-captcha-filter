@@ -2,15 +2,9 @@ package org.wso2.carbon.extension.captcha;
 
 import javax.servlet.*;
 import javax.servlet.http.*;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.File;
-import java.io.FileReader;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
@@ -208,17 +202,29 @@ public class CustomCaptchaFilter implements Filter {
         return conn;
     }
 
-    private String constructFailureRedirectUrl(HttpServletRequest req, String referer) {
+    private String constructFailureRedirectUrl(HttpServletRequest req, String referer) throws UnsupportedEncodingException {
         try {
             URL refererUrl = new URL(referer);
             String query = refererUrl.getQuery();
 
-            Map<String, String> params = Arrays.stream(query.split("&")).map(s -> s.split("=", 2)).collect(Collectors.toMap(a -> a[0], a -> a.length > 1 ? URLDecoder.decode(a[1], StandardCharsets.UTF_8) : ""));
+            Map<String, String> params = Arrays.stream(query.split("&")).map(s -> s.split("=", 2)).collect(Collectors.toMap(a -> a[0], a -> {
+                try {
+                    return a.length > 1 ? URLDecoder.decode(a[1], "UTF-8") : "";
+                } catch (UnsupportedEncodingException e) {
+                    throw new RuntimeException(e);
+                }
+            }));
 
             params.put("authFailure", "true");
             params.put("authFailureMsg", "recaptcha.fail.message");
 
-            String newQuery = params.entrySet().stream().map(e -> e.getKey() + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8)).collect(Collectors.joining("&"));
+            String newQuery = params.entrySet().stream().map(e -> {
+                try {
+                    return e.getKey() + "=" + URLEncoder.encode(e.getValue(), "UTF-8");
+                } catch (UnsupportedEncodingException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }).collect(Collectors.joining("&"));
 
             return refererUrl.getProtocol() + "://" + refererUrl.getHost() + (refererUrl.getPort() != -1 ? ":" + refererUrl.getPort() : "") + refererUrl.getPath() + "?" + newQuery;
         } catch (MalformedURLException e) {
@@ -227,7 +233,7 @@ public class CustomCaptchaFilter implements Filter {
             // fallback: minimal URL using request parameters
             String sessionDataKey = req.getParameter("sessionDataKey");
             String clientId = req.getParameter("client_id");
-            return "/authenticationendpoint/login.do" + "?sessionDataKey=" + URLEncoder.encode(sessionDataKey, StandardCharsets.UTF_8) + "&client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8) + "&authFailure=true" + "&authFailureMsg=recaptcha.fail.message";
+            return "/authenticationendpoint/login.do" + "?sessionDataKey=" + URLEncoder.encode(sessionDataKey, "UTF-8") + "&client_id=" + URLEncoder.encode(clientId, "UTF-8") + "&authFailure=true" + "&authFailureMsg=recaptcha.fail.message";
         }
     }
 
@@ -242,7 +248,7 @@ public class CustomCaptchaFilter implements Filter {
 
             for (String param : query.split("&")) {
                 if (param.startsWith("client_id=")) {
-                    return URLDecoder.decode(param.split("=")[1], StandardCharsets.UTF_8);
+                    return URLDecoder.decode(param.split("=")[1], "UTF-8");
                 }
             }
         } catch (Exception e) {

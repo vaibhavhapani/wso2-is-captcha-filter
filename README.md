@@ -161,7 +161,19 @@ Copy the JAR to the IS lib directory:
 ```
 ---
 
-## Step 5 — Configure the Filter in deployment.toml
+## Step 5 — Configure reCaptcha API keys
+
+```
+Register and create an API key pair for the required domain at https://www.google.com/recaptcha/admin. 
+The key pair consists of a site key and secret. 
+The site key is what is used when a reCaptcha widget is displayed on a page. 
+After verification, a new parameter called g-recaptcha-response appears on the form which the user submits. 
+From the server side, you can verify the submitted captcha response by calling the Google API with the secret key.
+```
+
+---
+
+## Step 6 — Configure the Filter in deployment.toml
 
 Add the following to `<IS-HOME>/repository/conf/deployment.toml`:
 
@@ -184,7 +196,7 @@ proxyPort = ""
 
 ---
 
-## Step 6 — Restart IS
+## Step 7 — Restart IS
 
 ```bash
 sh <IS-HOME>/bin/wso2server.sh restart
