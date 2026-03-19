@@ -148,7 +148,7 @@ cd wso2-is-captcha-filter/
 mvn clean install
 ```
 
-Output JAR: `target/custom-recaptcha-filter.jar`
+Output JAR: `target/org.wso2.carbon.extension.custom.captcha.filter.jar`
 
 ---
 
@@ -157,7 +157,7 @@ Output JAR: `target/custom-recaptcha-filter.jar`
 Copy the JAR to the IS lib directory:
 
 ```
-   <IS-HOME>/repository/components/lib/
+   <IS-HOME>/repository/components/dropins/
 ```
 ---
 

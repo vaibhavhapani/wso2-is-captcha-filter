@@ -8,12 +8,12 @@
     <groupId>org.wso2.carbon.extension</groupId>
     <artifactId>custom-recaptcha-filter</artifactId>
     <version>1.0.0</version>
-    <packaging>jar</packaging>
+    <packaging>bundle</packaging>
     <name>App-Specific reCAPTCHA Filter for WSO2 IS</name>
 
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -35,14 +35,35 @@
             <scope>provided</scope>
         </dependency>
     </dependencies>
-
     <build>
-        <finalName>custom-recaptcha-filter</finalName>
+        <finalName>org.wso2.carbon.extension.custom.captcha.filter</finalName>
         <plugins>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <version>3.3.0</version>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <version>5.1.8</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Bundle-SymbolicName>
+                            org.wso2.carbon.extension.custom.captcha.filter
+                        </Bundle-SymbolicName>
+                        <Bundle-Name>
+                            Custom reCAPTCHA Filter
+                        </Bundle-Name>
+                        <Bundle-Version>1.0.0</Bundle-Version>
+                        <Private-Package>
+                            org.wso2.carbon.extension.captcha
+                        </Private-Package>
+                        <Import-Package>
+                            javax.servlet;resolution:=optional,
+                            javax.servlet.http;resolution:=optional,
+                            org.apache.commons.logging;version="[1.1,2)",
+                            *
+                        </Import-Package>
+                        <DynamicImport-Package>*</DynamicImport-Package>
+                    </instructions>
+                </configuration>
             </plugin>
         </plugins>
     </build>
