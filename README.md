@@ -154,7 +154,7 @@ Output JAR: `target/org.wso2.carbon.extension.custom.captcha.filter.jar`
 
 ## Step 4 — Deploy the JAR
 
-Copy the JAR to the IS lib directory:
+Copy the JAR to the IS dropins directory:
 
 ```
    <IS-HOME>/repository/components/dropins/
