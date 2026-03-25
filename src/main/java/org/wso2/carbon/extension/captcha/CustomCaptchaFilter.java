@@ -169,8 +169,17 @@ public class CustomCaptchaFilter implements Filter {
 
         HttpURLConnection conn = getHttpURLConnection();
 
+        log.info("g captcha response: " + captcha);
+        log.info("recaptcha Secret: " + recaptchaSecret);
+
+        String payload = "secret=" + URLEncoder.encode(recaptchaSecret, "UTF-8")
+                + "&response=" + URLEncoder.encode(captcha, "UTF-8");
+        log.info("Captcha verification payload: " + payload);
+
+        log.info("Payload: " + payload);
+
         try (OutputStream os = conn.getOutputStream()) {
-            os.write(("secret=" + recaptchaSecret + "&response=" + captcha).getBytes());
+            os.write(payload.getBytes("UTF-8"));
         }
 
         StringBuilder sb = new StringBuilder();
