@@ -15,6 +15,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <carbon.identity.framework.version>5.18.187</carbon.identity.framework.version>
     </properties>
 
     <dependencies>
@@ -45,7 +46,25 @@
             <artifactId>json</artifactId>
             <version>20240303</version>
         </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.application.authentication.framework</artifactId>
+            <version>${carbon.identity.framework.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.identity.framework</groupId>
+            <artifactId>org.wso2.carbon.identity.core</artifactId>
+            <version>${carbon.identity.framework.version}</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
+    <repositories>
+        <repository>
+            <id>wso2-nexus</id>
+            <url>https://maven.wso2.org/nexus/content/repositories/wso2-public/</url>
+        </repository>
+    </repositories>
     <build>
         <finalName>org.wso2.carbon.extension.custom.captcha.filter</finalName>
         <plugins>

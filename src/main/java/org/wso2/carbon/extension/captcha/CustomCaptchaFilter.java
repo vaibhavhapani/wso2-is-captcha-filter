@@ -12,6 +12,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.json.JSONObject;
 
+import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
+
 import static org.wso2.carbon.extension.captcha.CustomCaptchaFilterConstants.*;
 
 public class CustomCaptchaFilter implements Filter {
@@ -146,17 +149,9 @@ public class CustomCaptchaFilter implements Filter {
             return;
         }
 
+        String sessionDataKey = req.getParameter("sessionDataKey");
+        String clientId = getServiceProviderFromSessionDataKey(sessionDataKey);
         String referer = req.getHeader("Referer");
-
-        if (referer == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Referer header missing. Skipping captcha validation.");
-            }
-            chain.doFilter(request, response);
-            return;
-        }
-
-        String clientId = extractClientId(referer);
 
         if (clientId == null || !targetClientIds.contains(clientId)) {
             chain.doFilter(request, response);
@@ -177,7 +172,7 @@ public class CustomCaptchaFilter implements Filter {
 
         if (!captchaValid) {
             log.warn("Captcha validation failed for client_id=" + clientId);
-            String redirectUrl = constructFailureRedirectUrl(req, referer);
+            String redirectUrl = constructFailureRedirectUrl(referer);
             res.sendRedirect(redirectUrl);
             return;
         }
@@ -246,7 +241,7 @@ public class CustomCaptchaFilter implements Filter {
         return conn;
     }
 
-    private String constructFailureRedirectUrl(HttpServletRequest req, String referer) {
+    private String constructFailureRedirectUrl(String referer) {
 
         try {
             URL url = new URL(referer);
@@ -296,21 +291,29 @@ public class CustomCaptchaFilter implements Filter {
         }
     }
 
-    private String extractClientId(String referer) {
-        try {
-            URL url = new URL(referer);
-            String query = url.getQuery();
+    private String getServiceProviderFromSessionDataKey(String sessionDataKey) {
 
-            if (query == null) return null;
-
-            for (String param : query.split("&")) {
-                if (param.startsWith("client_id=")) {
-                    return URLDecoder.decode(param.split("=", 2)[1], "UTF-8");
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Error extracting client_id from referer", e);
+        if (sessionDataKey == null) {
+            log.warn("sessionDataKey is null");
+            return null;
         }
+
+        try {
+            AuthenticationContext context =
+                    FrameworkUtils.getAuthenticationContextFromCache(sessionDataKey);
+
+            if (context != null && context.getRelyingParty() != null) {
+                String clientId = context.getRelyingParty();
+                log.info("Resolved Service Provider: " + clientId);
+                return clientId;
+            } else {
+                log.warn("AuthenticationContext not found for sessionDataKey: " + sessionDataKey);
+            }
+
+        } catch (Exception e) {
+            log.error("Error retrieving AuthenticationContext", e);
+        }
+
         return null;
     }
 
