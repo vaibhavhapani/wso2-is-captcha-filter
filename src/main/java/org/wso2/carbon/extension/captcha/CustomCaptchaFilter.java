@@ -3,15 +3,14 @@ package org.wso2.carbon.extension.captcha;
 import javax.servlet.*;
 import javax.servlet.http.*;
 import java.io.*;
-import java.net.HttpURLConnection;
 import java.net.*;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.json.JSONObject;
 
 import static org.wso2.carbon.extension.captcha.CustomCaptchaFilterConstants.*;
 
@@ -19,66 +18,73 @@ public class CustomCaptchaFilter implements Filter {
 
     private static final Log log = LogFactory.getLog(CustomCaptchaFilter.class);
 
+    private static volatile boolean initialized = false;
+
     private static String siteVerifyUrl;
     private static String recaptchaSecret;
-    private Set<String> targetClientIds;
+    private static Set<String> targetClientIds = Collections.emptySet();
     private static String proxyHost;
     private static int proxyPort = -1;
-    private static boolean initialized = false;
 
-    public CustomCaptchaFilter() {
-    }
+    private static final int CONNECT_TIMEOUT = 5000;
+    private static final int READ_TIMEOUT = 5000;
 
     @Override
     public void init(FilterConfig filterConfig) {
-        if (initialized) {
-            return;
-        }
+        if (initialized) return;
 
         synchronized (CustomCaptchaFilter.class) {
             if (!initialized) {
-                log.info("CUSTOM CAPTCHA FILTER INITIALIZED!!");
+                log.info("Initializing CustomCaptchaFilter...");
                 loadCaptchaConfig();
+                initialized = true;
             }
         }
     }
 
     private void loadCaptchaConfig() {
+        String carbonHome = System.getProperty("carbon.home");
 
-        try {
-            String carbonHome = System.getProperty("carbon.home");
-            File file = new File(carbonHome + "/repository/conf/deployment.toml");
+        if (carbonHome == null) {
+            log.error("carbon.home system property is not set!");
+            return;
+        }
 
-            BufferedReader reader = new BufferedReader(new FileReader(file));
+        File file = new File(carbonHome + "/repository/conf/deployment.toml");
+
+        if (!file.exists()) {
+            log.error("deployment.toml not found at: " + file.getAbsolutePath());
+            return;
+        }
+
+        boolean inBlock = false;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+
             String line;
-
-            boolean inCustomCaptchaBlock = false;
-
             while ((line = reader.readLine()) != null) {
+
                 line = line.trim();
 
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
-                }
+                if (line.isEmpty() || line.startsWith("#")) continue;
 
                 if (line.startsWith("[") && line.endsWith("]")) {
-                    inCustomCaptchaBlock = line.equals(CUSTOM_CAPTCHA_BLOCK);
+                    inBlock = line.equals(CUSTOM_CAPTCHA_BLOCK);
                     continue;
                 }
 
-                if (!inCustomCaptchaBlock || !line.contains("=")) {
-                    continue;
-                }
+                if (!inBlock || !line.contains("=")) continue;
 
-                // Split key and value
                 String[] parts = line.split("=", 2);
                 String key = parts[0].trim();
                 String value = parts[1].replace("\"", "").trim();
 
                 switch (key) {
-
                     case CLIENT_IDs:
-                        targetClientIds = Arrays.stream(value.split(",")).map(String::trim).collect(Collectors.toSet());
+                        targetClientIds = Arrays.stream(value.split(","))
+                                .map(String::trim)
+                                .filter(s -> !s.isEmpty())
+                                .collect(Collectors.toSet());
                         break;
 
                     case SITE_VERIFY_URL:
@@ -100,64 +106,85 @@ public class CustomCaptchaFilter implements Filter {
                             log.warn("Invalid proxy port: " + value);
                         }
                         break;
-
-                    default:
-                        break;
                 }
             }
-            reader.close();
-        } catch (Exception e) {
-            log.error("Failed to load captcha configuration", e);
+
+        } catch (IOException e) {
+            log.error("Error reading deployment.toml", e);
         }
 
-        initialized = true;
-        if (proxyPort != -1 && (proxyHost == null || proxyHost.isEmpty())) {
-            log.warn("Proxy port is set but proxy host is missing");
+        validateConfig();
+    }
+
+    private void validateConfig() {
+        if (siteVerifyUrl == null || recaptchaSecret == null) {
+            log.error("Captcha configuration is incomplete!");
         }
-        log.info("Captcha enabled for SP client IDs: " + targetClientIds);
-        log.info("reCAPTCHA verify endpoint: " + siteVerifyUrl);
+
+        log.info("Captcha enabled for client IDs: " + targetClientIds);
+        log.info("reCAPTCHA response verification endpoint configured: " + siteVerifyUrl);
+
+        if (proxyPort != -1 && (proxyHost == null || proxyHost.isEmpty())) {
+            log.warn("Proxy port is set but proxy host is missing.");
+        }
     }
 
     @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+
+        if (!(request instanceof HttpServletRequest) || !(response instanceof HttpServletResponse)) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse res = (HttpServletResponse) response;
 
         if (!"POST".equalsIgnoreCase(req.getMethod())) {
             chain.doFilter(request, response);
             return;
         }
 
-        log.info("CustomCaptchaFilter triggered");
-
         String referer = req.getHeader("Referer");
+
+        if (referer == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Referer header missing. Skipping captcha validation.");
+            }
+            chain.doFilter(request, response);
+            return;
+        }
+
         String clientId = extractClientId(referer);
 
-        if (clientId != null && targetClientIds.contains(clientId)) {
-
-            log.info("Captcha validation required for SP: " + clientId);
-            boolean captchaValid = false;
-
-            try {
-                captchaValid = verifyCaptcha(req.getParameter(RECAPTCHA_PARAM));
-            } catch (IOException e) {
-                log.error("Google reCAPTCHA API unreachable: " + e.getMessage());
-            }
-
-            if (!captchaValid) {
-                log.error("Captcha validation failed — redirecting.");
-
-                String redirectUrl = constructFailureRedirectUrl(req, referer);
-                ((HttpServletResponse) response).sendRedirect(redirectUrl);
-                return;
-            }
-            log.info("Captcha validation passed.");
+        if (clientId == null || !targetClientIds.contains(clientId)) {
+            chain.doFilter(request, response);
+            return;
         }
-        chain.doFilter(request, response);
-    }
 
-    @Override
-    public void destroy() {
+        log.info("Captcha validation required for client_id=" + clientId);
+
+        boolean captchaValid;
+        String gCaptchaResponse = req.getParameter(RECAPTCHA_PARAM);
+
+        try {
+            captchaValid = verifyCaptcha(gCaptchaResponse);
+        } catch (Exception e) {
+            log.error("Captcha verification failed due to exception", e);
+            captchaValid = false;
+        }
+
+        if (!captchaValid) {
+            log.warn("Captcha validation failed for client_id=" + clientId);
+            String redirectUrl = constructFailureRedirectUrl(req, referer);
+            res.sendRedirect(redirectUrl);
+            return;
+        }
+
+        log.info("Captcha validation passed for client_id=" + clientId);
+
+        chain.doFilter(request, response);
     }
 
     private boolean verifyCaptcha(String captcha) throws IOException {
@@ -167,39 +194,45 @@ public class CustomCaptchaFilter implements Filter {
             return false;
         }
 
-        HttpURLConnection conn = getHttpURLConnection();
+        HttpURLConnection conn = getConnection();
 
-        log.info("g captcha response: " + captcha);
-        log.info("recaptcha Secret: " + recaptchaSecret);
-
-        String payload = "secret=" + URLEncoder.encode(recaptchaSecret, "UTF-8")
-                + "&response=" + URLEncoder.encode(captcha, "UTF-8");
-        log.info("Captcha verification payload: " + payload);
-
-        log.info("Payload: " + payload);
+        String payload = "secret=" + URLEncoder.encode(recaptchaSecret, StandardCharsets.UTF_8.name()) +
+                "&response=" + URLEncoder.encode(captcha, StandardCharsets.UTF_8.name());
 
         try (OutputStream os = conn.getOutputStream()) {
-            os.write(payload.getBytes("UTF-8"));
+            os.write(payload.getBytes(StandardCharsets.UTF_8));
         }
 
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-            String line;
-            while ((line = br.readLine()) != null) sb.append(line);
+        int responseCode = conn.getResponseCode();
+
+        if (responseCode != 200) {
+            log.error("reCAPTCHA API returned non-200 response: " + responseCode);
+            return false;
         }
 
-        log.info("Google reCAPTCHA response: " + sb);
+        String responseBody;
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
 
-        return sb.toString().contains("\"success\":true") || sb.toString().contains("\"success\": true");
+            responseBody = br.lines().collect(Collectors.joining());
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("reCAPTCHA raw response: " + responseBody);
+        }
+
+        JSONObject json = new JSONObject(responseBody);
+        return json.optBoolean("success", false);
     }
 
-    private HttpURLConnection getHttpURLConnection() throws IOException {
+    private HttpURLConnection getConnection() throws IOException {
+
         URL url = new URL(siteVerifyUrl);
         HttpURLConnection conn;
 
         if (proxyHost != null && !proxyHost.isEmpty() && proxyPort > 0) {
-            log.info("Using proxy for reCAPTCHA call: " + proxyHost + ":" + proxyPort);
-            Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(proxyHost, proxyPort));
+            Proxy proxy = new Proxy(Proxy.Type.HTTP,
+                    new InetSocketAddress(proxyHost, proxyPort));
             conn = (HttpURLConnection) url.openConnection(proxy);
         } else {
             conn = (HttpURLConnection) url.openConnection();
@@ -207,42 +240,59 @@ public class CustomCaptchaFilter implements Filter {
 
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
+        conn.setConnectTimeout(CONNECT_TIMEOUT);
+        conn.setReadTimeout(READ_TIMEOUT);
 
         return conn;
     }
 
-    private String constructFailureRedirectUrl(HttpServletRequest req, String referer) throws UnsupportedEncodingException {
-        try {
-            URL refererUrl = new URL(referer);
-            String query = refererUrl.getQuery();
+    private String constructFailureRedirectUrl(HttpServletRequest req, String referer) {
 
-            Map<String, String> params = Arrays.stream(query.split("&")).map(s -> s.split("=", 2)).collect(Collectors.toMap(a -> a[0], a -> {
-                try {
-                    return a.length > 1 ? URLDecoder.decode(a[1], "UTF-8") : "";
-                } catch (UnsupportedEncodingException e) {
-                    throw new RuntimeException(e);
-                }
-            }));
+        try {
+            URL url = new URL(referer);
+            String query = url.getQuery();
+
+            if (query == null) {
+                throw new IllegalArgumentException("Query is null");
+            }
+
+            Map<String, String> params = Arrays.stream(query.split("&"))
+                    .map(s -> s.split("=", 2))
+                    .collect(Collectors.toMap(
+                            a -> a[0],
+                            a -> {
+                                try {
+                                    return a.length > 1 ? URLDecoder.decode(a[1], "UTF-8") : "";
+                                } catch (UnsupportedEncodingException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
+                    ));
 
             params.put("authFailure", "true");
             params.put("authFailureMsg", "recaptcha.fail.message");
 
-            String newQuery = params.entrySet().stream().map(e -> {
-                try {
-                    return e.getKey() + "=" + URLEncoder.encode(e.getValue(), "UTF-8");
-                } catch (UnsupportedEncodingException ex) {
-                    throw new RuntimeException(ex);
-                }
-            }).collect(Collectors.joining("&"));
+            String newQuery = params.entrySet().stream()
+                    .map(e -> e.getKey() + "=" + encode(e.getValue()))
+                    .collect(Collectors.joining("&"));
 
-            return refererUrl.getProtocol() + "://" + refererUrl.getHost() + (refererUrl.getPort() != -1 ? ":" + refererUrl.getPort() : "") + refererUrl.getPath() + "?" + newQuery;
-        } catch (MalformedURLException e) {
-            log.error("Invalid Referer URL: " + referer, e);
+            return url.getProtocol() + "://" + url.getHost()
+                    + (url.getPort() != -1 ? ":" + url.getPort() : "")
+                    + url.getPath() + "?" + newQuery;
 
-            // fallback: minimal URL using request parameters
-            String sessionDataKey = req.getParameter("sessionDataKey");
-            String clientId = req.getParameter("client_id");
-            return "/authenticationendpoint/login.do" + "?sessionDataKey=" + URLEncoder.encode(sessionDataKey, "UTF-8") + "&client_id=" + URLEncoder.encode(clientId, "UTF-8") + "&authFailure=true" + "&authFailureMsg=recaptcha.fail.message";
+        } catch (Exception e) {
+            log.error("Error constructing redirect URL, falling back", e);
+
+            return "/authenticationendpoint/login.do"
+                    + "?authFailure=true&authFailureMsg=recaptcha.fail.message";
+        }
+    }
+
+    private String encode(String val) {
+        try {
+            return URLEncoder.encode(val, "UTF-8");
+        } catch (Exception e) {
+            return val;
         }
     }
 
@@ -251,19 +301,20 @@ public class CustomCaptchaFilter implements Filter {
             URL url = new URL(referer);
             String query = url.getQuery();
 
-            if (query == null) {
-                return null;
-            }
+            if (query == null) return null;
 
             for (String param : query.split("&")) {
                 if (param.startsWith("client_id=")) {
-                    return URLDecoder.decode(param.split("=")[1], "UTF-8");
+                    return URLDecoder.decode(param.split("=", 2)[1], "UTF-8");
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to extract client_id from referer", e);
+            log.warn("Error extracting client_id from referer", e);
         }
         return null;
     }
 
+    @Override
+    public void destroy() {
+    }
 }

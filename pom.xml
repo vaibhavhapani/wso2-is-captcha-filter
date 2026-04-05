@@ -40,6 +40,11 @@
             <version>4.5.14</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20240303</version>
+        </dependency>
     </dependencies>
     <build>
         <finalName>org.wso2.carbon.extension.custom.captcha.filter</finalName>
@@ -61,6 +66,8 @@
                         <Private-Package>
                             org.wso2.carbon.extension.captcha
                         </Private-Package>
+                        <Embed-Dependency>json</Embed-Dependency>
+                        <Embed-Transitive>true</Embed-Transitive>
                         <Import-Package>
                             javax.servlet;resolution:=optional,
                             javax.servlet.http;resolution:=optional,
